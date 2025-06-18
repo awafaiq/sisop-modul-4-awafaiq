@@ -1,66 +1,64 @@
-#define FUSE_USE_VERSION 31
+#define FUSE_USE_VERSION 28
+
 #include <fuse.h>
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <pwd.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 
-const char *troll_path = "/mnt/troll";
-const char *trap_flag_path = "/tmp/troll_triggered-2";
-
-const char *troll_ascii = 
+const char *mountPath = "/mnt/troll";
+const char *trapPath = "/tmp/troll_triggered-2";
+const char *isDain = "Very spicy internal developer information: leaked roadmap.docx\n";
+const char *isNotDain = "DainTontas' personal secret!!.txt\n";
+const char *upload_fileMedia = "";
+const char *asciiTroll = 
 
 " _            _                                                          \n"
 " |_ _  | |   _|_ _  ._   o _|_    _.  _   _. o ._    ._ _        _. ._ _| \n"
 " | (/_ | |    | (_) |    |  |_   (_| (_| (_| | | |   | (/_ \\/\\/ (_| | (_| \n"
 "                                      _|                                  \n";
 
-const char *isDain = "Very spicy internal developer information: leaked roadmap.docx\n";
-const char *isNotDain = "DainTontas' personal secret!!.txt\n";
-const char *upload_fileMedia = "";
-
 const char* getUSN(){
     struct fuse_context *uid = fuse_get_context();
-    struct passwd *pw = getpwuid(uid->uid);
-    return pw ? pw->pw_name : "unknown";
+    struct passwd *userInfo = getpwuid(uid->uid);
+    return userInfo ? userInfo->pw_name : "unknown";
 }
 
 int trap_triggered(){
-    return access(trap_flag_path, F_OK) == 0;
+    return access(trapPath, F_OK) == 0;
 }
 
 void activate(){
-    FILE *f = fopen(trap_flag_path, "w");
-    if (f){
-        fclose(f);
+    FILE *file = fopen(trapPath, "w");
+    if (file){
+        fclose(file);
     }
 }
 
-static int getattr(const char *path, struct stat *stbuf){
-    memset(stbuf, 0, sizeof(struct stat));
+static int getattr(const char *path, struct stat *fileInfo){
+    memset(fileInfo, 0, sizeof(struct stat));
     
     if (strcmp(path, "/") == 0){
-        stbuf->st_mode = S_IFDIR | 0755;
-        stbuf->st_nlink = 2;
+        fileInfo->st_mode = S_IFDIR | 0755;
+        fileInfo->st_nlink = 2;
     }
     else if (strcmp(path, "/very_spicy_info.txt") == 0 || strcmp(path, "/upload.txt") == 0){
-        stbuf->st_mode = S_IFREG| 0666;
-        stbuf->st_nlink = 1;
-        stbuf->st_size = 1024; // dummy size
+        fileInfo->st_mode = S_IFREG| 0666;
+        fileInfo->st_nlink = 1;
+        fileInfo->st_size = 512;
     }
     else{
         return -ENOENT;
     }
-
     return 0;
 }
 
 static int readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi){
+    // copied from module
     (void) offset;
     (void) fi;
 
@@ -83,12 +81,14 @@ static int openTroll(const char *path, struct fuse_file_info *fi){
 }
 
 static int readTroll(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi){
+    // copied from module
     (void) fi;
+
     const char *username = getUSN();
     const char *fileMedia = "";
 
     if (trap_triggered()){
-        fileMedia = troll_ascii;
+        fileMedia = asciiTroll;
     }
     else if (strcmp(path, "/very_spicy_info.txt") == 0){
         if (strcmp(username, "DainTontas") == 0){
@@ -105,21 +105,24 @@ static int readTroll(const char *path, char *buf, size_t size, off_t offset, str
         return -ENOENT;
     }
 
-    size_t len = strlen(fileMedia);
-    if (offset >= len){
+    size_t length = strlen(fileMedia);
+    
+    if (offset >= length){
         return 0;
     }
 
-    if (offset + size > len){
-        size = len - offset;
+    if (offset + size > length){
+        size = length - offset;
     }
     memcpy(buf, fileMedia + offset, size);
     return size;
 }
 
 static int writeTroll(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi){
+    // copied from module
     (void) fi;
     if (strcmp(path, "/upload.txt") == 0 && strcmp(getUSN(), "DainTontas") == 0){
+
         if (strstr(buf, "upload") != NULL){
             activate();
         }
@@ -136,6 +139,6 @@ static struct fuse_operations DainTontas_Operation = {
     .readdir = readdir,
 };
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[]){
     return fuse_main(argc, argv, &DainTontas_Operation, NULL);
 }
