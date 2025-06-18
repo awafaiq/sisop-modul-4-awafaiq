@@ -11,7 +11,7 @@
 # now supported, but we still recommend to use the BIOS distributed with
 # Bochs. Now the start address can be calculated from image size.
 #=======================================================================
-romimage: file=$BXSHARE/BIOS-bochs-latest
+romimage: file=/home/rrraynald/bochs-2.8/bios/BIOS-bochs-latest
 
 #=======================================================================
 # CPU:
@@ -70,7 +70,7 @@ megs: 32
 # VGAROMIMAGE
 # You now need to load a VGA ROM BIOS into C0000.
 #=======================================================================
-vgaromimage: file=$BXSHARE/VGABIOS-lgpl-latest
+vgaromimage: file=/home/rrraynald/bochs-2.8/bios/VGABIOS-lgpl-latest
 
 #=======================================================================
 # VGA:
