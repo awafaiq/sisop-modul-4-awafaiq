@@ -110,7 +110,6 @@ static int readTroll(const char *path, char *buf, size_t size, off_t offset, str
     if (offset >= length){
         return 0;
     }
-
     if (offset + size > length){
         size = length - offset;
     }
@@ -122,7 +121,6 @@ static int writeTroll(const char *path, const char *buf, size_t size, off_t offs
     // copied from module
     (void) fi;
     if (strcmp(path, "/upload.txt") == 0 && strcmp(getUSN(), "DainTontas") == 0){
-
         if (strstr(buf, "upload") != NULL){
             activate();
         }
