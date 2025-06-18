@@ -14,7 +14,7 @@ const char *mountPath = "/mnt/troll";
 const char *trapPath = "/tmp/troll_triggered-2";
 const char *isDain = "Very spicy internal developer information: leaked roadmap.docx\n";
 const char *isNotDain = "DainTontas' personal secret!!.txt\n";
-const char *upload_fileMedia = "";
+const char *uploadFileMedia = "";
 const char *asciiTroll = 
 
 " _            _                                                          \n"
@@ -28,7 +28,7 @@ const char* getUSN(){
     return userInfo ? userInfo->pw_name : "unknown";
 }
 
-int trap_triggered(){
+int triggerTrap(){
     return access(trapPath, F_OK) == 0;
 }
 
@@ -87,7 +87,7 @@ static int readTroll(const char *path, char *buf, size_t size, off_t offset, str
     const char *username = getUSN();
     const char *fileMedia = "";
 
-    if (trap_triggered()){
+    if (triggerTrap()){
         fileMedia = asciiTroll;
     }
     else if (strcmp(path, "/very_spicy_info.txt") == 0){
@@ -99,7 +99,7 @@ static int readTroll(const char *path, char *buf, size_t size, off_t offset, str
         }
     }
     else if (strcmp(path, "/upload.txt") == 0){
-        fileMedia = upload_fileMedia;
+        fileMedia = uploadFileMedia;
     }
     else{
         return -ENOENT;
