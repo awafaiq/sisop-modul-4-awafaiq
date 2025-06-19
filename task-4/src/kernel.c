@@ -5,7 +5,7 @@
 void printString(char* str);
 void readString(char* buf);
 void clearScreen();
-void EchoFunction(char* Input);
+void EchoFunction(char* Input, char* buf);
 void SecondCMD(char* Input);
 
 int main() {
@@ -44,7 +44,10 @@ int main() {
 
                 if (strcmp(cmd, "echo"))
                 {
-                    EchoFunction(buf);
+                    char temp[128];
+                    EchoFunction(buf, temp);
+                    printString(temp);
+                    printString("\n");
                 } else if (strcmp(cmd, "clear"))
                 {
                     clearScreen();
@@ -96,175 +99,185 @@ void clearScreen() {
     interrupt(0x10, 0x0200, 0, 0, 0);
 }
 
-void EchoFunction(char* Input) {
-    char buf[128];
+void EchoFunction(char* Input, char* buf) {
     int r = 5;
-    while (Input[r] == ' ') r++;  //lewati spasi setelah 'echo'
+    while (Input[r] == ' ') {
+        r++; //lewati spasi setelah 'echo'
+    }  
     strcpy(Input + r, buf);
-    printString(buf);
-    printString("\n");
 }
 
-void SecondCMD(char* Input) {
-    char bef[128];
-    char aft[128];
-    char buf[128];
-    char grep[16];
-    char grepbuf[128];
+int pisahCMD(char* input, char cmds[][128]) {
+    int count = 0;
     int i = 0, j = 0;
-    int r = 0;
-    int c = 0, d = 0;
-    int lenbuf = 0;
-    int lenrepbuf = 0;
+
+    while (1) {
+        if (input[i] == '|' || input[i] == '\0') 
+        {
+            cmds[count][j] = '\0'; //end string
+            count++;
+            j = 0;
+            if (input[i] == '\0') break;
+            i++;
+            while (input[i] == ' ') i++; //skip space
+        } else {
+            cmds[count][j++] = input[i++];
+        }
+    }
+    return count;
+}
+
+void grepFunction(char* buf, char* pattern) {
+    int lenbuf = strlen(buf);
+    int lenpat = strlen(pattern);
     int found = 0;
-    int match = 0;
-    int len = 0;
-    int kata = 0;
-    int start = 0;
-    int end = 0;
+    int c, d;
+    int i;
 
-    //pisahkan sebelum dan sesudah '|'
-    while (Input[i] != '|' && Input[i] != '\0') {
-        bef[i] = Input[i];
-        i++;
-    }
-    bef[i] = '\0';
-
-    if (Input[i] == '|') {
-        i++;
-        while (Input[i] == ' ') i++;
-        while (Input[i] != '\0') {
-            aft[j] = Input[i];
-            j++;
-            i++;
-        }
-    }
-    aft[j] = '\0';
-
-    //ambil echo
-    r = 5;
-    while (bef[r] == ' ') r++;
-    strcpy(bef + r, buf);
-    
-    //ambil cmd setelah pipe
-    i = 0;
-    while (aft[i] != ' ' && aft[i] != '\0') {
-        grep[i] = aft[i];
-        i++;
-    }
-    grep[i] = '\0';
-
-    if (strcmp(grep, "grep")) {
-        int k = 0;
-        if (aft[i] == ' ') i++;
-        while (aft[i] != '\0') {
-            grepbuf[k] = aft[i];
-            i++;
-            k++;
-        }
-        grepbuf[k] = '\0';
-
-        found = 0;
-        lenbuf = strlen(buf);
-        lenrepbuf = strlen(grepbuf);
-
-        for (c = 0; c <= (lenbuf - lenrepbuf); c++) {
-            match = 1;
-            for (d = 0; d < lenrepbuf; d++) {
-                if (buf[c + d] != grepbuf[d]) {
-                    match = 0;
-                    break;
-                }
-            }
-            if (match) {
-                found = 1;
+    for (c = 0; c <= (lenbuf - lenpat); c++) {
+        int match = 1;
+        for (d = 0; d < lenpat; d++) {
+            if (buf[c + d] != pattern[d]) {
+                match = 0;
                 break;
             }
         }
 
-        if (found) {
-            printString(grepbuf);
+        if (match) {
+            found = 1;            
+            for (i = 0; i < lenpat; i++) {
+                buf[i] = pattern[i];  // copy pattern dari buf ke buf, hanya bagian match
+            }
+            buf[lenpat] = '\0'; 
+
+            printString(buf);
             printString("\n");
-            strcpy(buf, grepbuf);
-        } else {
-            printString("NULL\n");
+            return;
         }
-    } else if (strcmp(grep, "wc")) {
-        r = 5;
-        while (bef[r] == ' ') {
-            r++; //skip spasi abis echo
-        }
+    }
 
-        len = 0;
-        kata = 0;
-        start = -1;
-        end = -1;
+    // kalau tidak ditemukan
+    buf[0] = 'N';
+    buf[1] = 'U';
+    buf[2] = 'L';
+    buf[3] = 'L';
+    buf[4] = '\0';
 
-        for (i = r; (bef[i] != '\0') && (bef[i] != '|'); i++) {
-            if (bef[i] != ' ') {
-                if (start == -1) start = i;
-                end = i;
+    printString("NULL\n");
+}
 
-                if ((i == r) || (bef[i - 1] == ' ')) {
-                    kata++;
-                }
+
+
+void wcFuntion(char* buf) {
+    int i;
+    int len = 0;
+    int kata = 0;
+    int start = -1;
+    int end = -1;
+
+    for (i = 0; buf[i] != '\0'; i++) {
+        if (buf[i] != ' ') {
+            if (start == -1) {
+                start = i;
+            }
+            end = i;
+
+            if (i == 0 || buf[i - 1] == ' ') {
+                kata++;
             }
         }
+    }
 
-        if (start != -1 && end != -1) {
-            len = end - start + 1;
-        } else {
-            len = 0;
-        }   
+    if (start != -1 && end != -1) {
+        len = end - start + 1;
+    }
 
-        if (len == 0) {
-            printString("0 Karakter\n");
-        } else {
-            char s[8];
-            int x = len;
-            int index = 0;
-
-            while (x > 0) {
-                s[index] = mod(x, 10) + '0';
-                x = div(x, 10);
-                index++;
-            }
-
-            for (i = index - 1; i >= 0; i--)
-            {
-                char ch[2];
-                ch[0] = s[i];
-                ch[1] = '\0';
-                printString(ch);
-            }
-            printString(" Karakter\n");
-        }
-
-        if (kata == 0) {
-            printString("0 Kata\n");
-        } else {
-            char s[8];
-            int x = kata;
-            int index = 0;
-
-            while (x > 0) {
-                s[index] = mod(x, 10) + '0';
-                x = div(x, 10);
-                index++;
-            }
-
-            for (i = index - 1; i >= 0; i--)
-            {
-                char ch[2];
-                ch[0] = s[i];
-                ch[1] = '\0';
-                printString(ch);
-            }
-            printString(" Kata\n");
-        }
-
-        printString("1 Baris\n");
+    if (len == 0) {
+        printString("0 Karakter\n");
     } else {
-        printString("NULL \n");
+        char s[8];
+        int x = len;
+        int index = 0;
+
+        while (x > 0) {
+            s[index] = mod(x, 10) + '0';
+            x = div(x, 10);
+            index++;
+        }
+
+        for (i = index - 1; i >= 0; i--) {
+            char ch[2];
+            ch[0] = s[i];
+            ch[1] = '\0';
+            printString(ch);
+        }
+        printString(" Karakter\n");
+    }
+
+    if (kata == 0) {
+        printString("0 Kata\n");
+    } else {
+        char s[8];
+        int x = kata;
+        int index = 0;
+
+        while (x > 0) {
+            s[index] = mod(x, 10) + '0';
+            x = div(x, 10);
+            index++;
+        }
+
+        for (i = index - 1; i >= 0; i--) {
+            char ch[2];
+            ch[0] = s[i];
+            ch[1] = '\0';
+            printString(ch);
+        }
+        printString(" Kata\n");
+    }
+    printString("1 Baris\n");
+}
+
+void SecondCMD(char* Input) {
+    char cmds[4][128];
+    char buf[128];
+    int i;
+    int count;
+
+    count = pisahCMD(Input, cmds);
+
+    for (i = 0; i < count; i++)
+    {
+        char cmd[16];
+        char isi[128];
+        int j = 0;
+        int k = 0;
+
+
+        while (cmds[i][j] != ' ' && cmds[i][j] != '\0') {
+            cmd[k++] = cmds[i][j++];
+        }
+        cmd[k] = '\0';
+
+        while (cmds[i][j] == ' ') {
+            j++;
+        }
+        strcpy(cmds[i] + j, isi);
+
+        if (strcmp(cmd, "echo")) {
+            int r = 0;
+            while (isi[r] == ' '){
+                r++;
+            }
+            strcpy(isi + r, buf);
+        }
+        else if (strcmp(cmd, "grep")) {
+            grepFunction(buf, isi);
+        } else if (strcmp(cmd, "wc")) {
+            wcFuntion(buf);
+        } else {
+            printString("Command tidak diketahui\n");
+            break;
+        }
     }
 }
