@@ -37,10 +37,10 @@ Task 2 : (Naura)
 > File Biner -> Konten biner mentah harus ditampilkan dalam encoding Base64 alih-alih bentuk aslinya.
 > ### d.  Logging Akses
 > Semua operasi akses file yang dilakukan dalam LawakFS++ harus dicatat ke file yang terletak di /var/log/lawakfs.log.
-
-Setiap entri log harus mematuhi format berikut:
-
-[YYYY-MM-DD HH:MM:SS] [UID] [ACTION] [PATH]
+>
+> Setiap entri log harus mematuhi format berikut:
+>
+> [YYYY-MM-DD HH:MM:SS] [UID] [ACTION] [PATH]
 
 
 #### Kode Lawak.c
@@ -350,5 +350,18 @@ int main(int argc, char *argv[]) {
     return fuse_main(argc - 1, fuse_argv, &x_oper, NULL);
 }
 ```
+
+> ### e. Konfigurasi
+
+#### Kode Lawak.conf
+```c
+FILTER_WORDS=ducati,ferrari,mu,chelsea,prx,onic,sisop
+SECRET_FILE_BASENAME=secret
+ACCESS_START=08:00
+ACCESS_END=20:00
+```
+
+
+
 
 
