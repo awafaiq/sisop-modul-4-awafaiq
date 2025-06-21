@@ -1,9 +1,9 @@
 [![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/V7fOtAk7)
 |    NRP     |      Name      |
 | :--------: | :------------: |
-| 5025221000 | Student 1 Name |
-| 5025221000 | Student 2 Name |
-| 5025221000 | Student 3 Name |
+| 5025241020 | Raynald Ramadhani Fachriansyah |
+| 5025241038 | Danish Faiq Ibad Yuadi |
+| 5025241042 | Naura Rossa Azalia |
 
 # Praktikum Modul 4 _(Module 4 Lab Work)_
 
