@@ -26,9 +26,18 @@ Task 2 : (Naura)
 ## Task 2 : (Naura)
 
 > ### a. Ekstensi File Tersembunyi
+> Semua file yang ditampilkan dalam FUSE mountpoint harus ekstensinya disembunyikan.
 > ### b. Akses Berbasis Waktu untuk File Secret
+> File yang nama dasarnya adalah secret (misalnya, secret.txt, secret.zip) hanya dapat diakses antara pukul 08:00 (8 pagi) dan 18:00 (6 sore) waktu sistem.
 > ### c. Filtering Konten Dinamis
+> Ketika sebuah file dibuka dan dibaca, isinya harus secara dinamis difilter atau diubah berdasarkan tipe file yang terdeteksi:
+> File Teks -> Semua kata yang dianggap lawak (case-insensitive) harus diganti dengan kata "lawak".
+> File Biner -> Konten biner mentah harus ditampilkan dalam encoding Base64 alih-alih bentuk aslinya.
 > ### d.  Logging Akses
+> Semua operasi akses file yang dilakukan dalam LawakFS++ harus dicatat ke file yang terletak di /var/log/lawakfs.log.
+Setiap entri log harus mematuhi format berikut:
+[YYYY-MM-DD HH:MM:SS] [UID] [ACTION] [PATH]
+
 
 #### Kode Lawak.c
 ```c
