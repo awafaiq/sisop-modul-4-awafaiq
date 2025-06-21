@@ -148,7 +148,7 @@ void filter_text(char *buf, size_t size) {
 
 //
 // ==================
-// 🎮 FUSE OPERATIONS
+// FUSE OPERATIONS
 // ==================
 //
 
