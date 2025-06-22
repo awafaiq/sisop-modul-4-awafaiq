@@ -32,24 +32,26 @@ Buat 2 user di sistem yang akan berperan sebagai pemilik data:
 
 Struktur folder yang digunakan dalam source directory `/home/shared_files`:
 
-* `public/` → folder umum yang bisa diakses siapa pun
-* `private_yuadi/` → hanya bisa dibaca oleh user `yuadi`
-* `private_irwandi/` → hanya bisa dibaca oleh user `irwandi`
+* `public/` - folder umum yang bisa diakses siapa pun
+* `private_yuadi/` - hanya bisa dibaca oleh user `yuadi`
+* `private_irwandi/` - hanya bisa dibaca oleh user `irwandi`
 
 User ditambahkan menggunakan `useradd` dan diberi password via `passwd`.
 
 #### b. FUSE Mount Point
 
-Sistem file FUSE dimount ke `/mnt/secure_fs` dan akan merefleksikan isi dari `/home/shared_files`.
+Sistem file FUSE dimount ke `/mnt/secure_fs` dan akan meng-copy/reflect isi dari `/home/shared_files`.
 
 Jika kita `ls /mnt/secure_fs`, maka akan muncul:
 * `public/`
 * `private_yuadi/`
 * `private_irwandi/`
+![sisop-modul4-1-b](https://github.com/user-attachments/assets/11f79c44-1c3a-4f4f-bfe7-01e3fa4842ae)
+
 
 #### c. Read-Only System
 
-Seluruh sistem FUSE ini bersifat read-only, artinya:
+Seluruh sistem FUSE bersifat read-only, artinya:
 
 * Tidak ada user (termasuk root) yang bisa melakukan `mkdir`, `rmdir`, `touch`, `rm`, `cp`, `mv`, atau memodifikasi file apa pun.
 * Semua operasi write atau modify ditolak dengan `Permission denied`.
@@ -64,6 +66,8 @@ cat /mnt/secure_fs/public/materi_algoritma.txt
 ```
 
 Akan berhasil untuk user manapun, termasuk `yuadi`, `irwandi`, bahkan user lain.
+![sisop-modul4-1-c](https://github.com/user-attachments/assets/69a821f7-a35f-44fc-8eca-a4f0dbf3ec8d)
+
 
 #### e. Akses ke Folder Private
 
@@ -71,6 +75,8 @@ Akan berhasil untuk user manapun, termasuk `yuadi`, `irwandi`, bahkan user lain.
 * File dalam `private_irwandi/` hanya dapat dibaca oleh user `irwandi`.
 
 Jika user lain mencoba membaca file di folder yang bukan miliknya, maka akan gagal dengan `Permission denied`.
+![sisop-modul4-1-e](https://github.com/user-attachments/assets/8961f79e-704f-47cb-a38e-f8b415b0039e)
+
 
 ### 1. Header dan Library
 
@@ -112,7 +118,33 @@ void mkdir_mountpoint(const char *path)
 Membuat folder mount point jika belum ada.
 
 ```c
-static int checkAccessPerm(const char *path, uid_t uid, gid_t gid)
+static int checkAccessPerm(const char *path, uid_t uid, gid_t gid) {
+    char fullPath[PATH_MAX];
+    struct stat st;
+  
+    snprintf(fullPath, sizeof(fullPath), "%s%s", source_path, path);
+    if (lstat(fullPath, &st) == -1)
+      return -errno;
+  
+    const char *yuadi_path = "/private_yuadi";
+    const char *irwandi_path = "/private_irwandi";
+  
+    fprintf(stderr, "path=%s, uid=%d, st_uid=%d\n", path, uid, st.st_uid);
+  
+    if ((strncmp(path, yuadi_path, strlen(yuadi_path)) == 0 &&
+         (path[strlen(yuadi_path)] == '/' || path[strlen(yuadi_path)] == '\0'))) {
+      if (uid != st.st_uid)
+        return -EACCES;
+    }
+  
+    if ((strncmp(path, irwandi_path, strlen(irwandi_path)) == 0 &&
+         (path[strlen(irwandi_path)] == '/' ||
+          path[strlen(irwandi_path)] == '\0'))) {
+      if (uid != st.st_uid)
+        return -EACCES;
+    }
+    return 0;
+}
 ```
 
 Cek apakah user berhak mengakses file berdasarkan path:
@@ -123,7 +155,19 @@ Cek apakah user berhak mengakses file berdasarkan path:
 ### 3. Fungsi getattr
 
 ```c
-static int xmp_getattr(const char *path, struct stat *stbuf)
+static int xmp_getattr(const char *path, struct stat *stbuf) {
+  int res;
+  char fpath[PATH_MAX];
+
+  sprintf(fpath, "%s%s", source_path, path);
+
+  res = lstat(fpath, stbuf);
+
+  if (res == -1)
+    return -errno;
+
+  return 0;
+}
 ```
 
 1. Bangun path absolut file di source directory.
@@ -133,7 +177,49 @@ static int xmp_getattr(const char *path, struct stat *stbuf)
 ### 4. Fungsi readdir
 
 ```c
-static int xmp_readdir(const char *path, void *buf, fuse_fill_dir_t filler, ...)
+static int xmp_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
+                       off_t offset, struct fuse_file_info *fi) {
+  char fpath[PATH_MAX];
+
+  if (strcmp(path, "/") == 0) {
+    path = source_path;
+    sprintf(fpath, "%s", path);
+  } else {
+    sprintf(fpath, "%s%s", source_path, path);
+  }
+
+  int res = 0;
+
+  DIR *dp;
+  struct dirent *de;
+  (void)offset;
+  (void)fi;
+
+  dp = opendir(fpath);
+
+  if (dp == NULL)
+    return -errno;
+
+  while ((de = readdir(dp)) != NULL) {
+    char childPath[PATH_MAX];
+
+    snprintf(childPath, sizeof(childPath), "%s%s", path, de->d_name);
+    struct stat st;
+
+    memset(&st, 0, sizeof(st));
+
+    st.st_ino = de->d_ino;
+    st.st_mode = de->d_type << 12;
+    res = (filler(buf, de->d_name, &st, 0));
+
+    if (res != 0)
+      break;
+  }
+
+  closedir(dp);
+
+  return 0;
+}
 ```
 
 1. Menerjemahkan direktori FUSE ke direktori nyata (`source_path + path`).
@@ -143,22 +229,75 @@ static int xmp_readdir(const char *path, void *buf, fuse_fill_dir_t filler, ...)
 ### 5. Fungsi read
 
 ```c
-static int xmp_read(const char *path, char *buf, size_t size, off_t offset, ...)
+static int xmp_read(const char *path, char *buf, size_t size, off_t offset,
+                    struct fuse_file_info *fi) {
+  char fpath[PATH_MAX];
+  if (strcmp(path, "/") == 0) {
+    path = source_path;
+
+    sprintf(fpath, "%s", path);
+  } else {
+    sprintf(fpath, "%s%s", source_path, path);
+
+    int accessGrant =
+        checkAccessPerm(path, fuse_get_context()->uid, fuse_get_context()->gid);
+    if (accessGrant != 0)
+      return accessGrant;
+  }
+
+  int res = 0;
+  int fd = 0;
+
+  (void)fi;
+
+  fd = open(fpath, O_RDONLY);
+
+  if (fd == -1)
+    return -errno;
+
+  res = pread(fd, buf, size, offset);
+
+  if (res == -1)
+    res = -errno;
+
+  close(fd);
+
+  return res;
+}
 ```
 
-1. Cek apakah user boleh membaca file tersebut (`checkAccessPerm()`).
+1. Periksa apakah user boleh membaca file tersebut (`checkAccessPerm()`).
 2. Jika diizinkan, buka file dengan `open`.
 3. Baca isinya ke buffer menggunakan `pread`.
 
 ### 6. Fungsi open
 
 ```c
-static int xmp_open(const char *path, struct fuse_file_info *fi)
+static int xmp_open(const char *path, struct fuse_file_info *fi) {
+  char fullPath[PATH_MAX];
+
+  snprintf(fullPath, sizeof(fullPath), "%s%s", source_path, path);
+
+  if ((fi->flags & O_ACCMODE) != O_RDONLY)
+    return -EACCES;
+
+  int accessGrant =
+      checkAccessPerm(path, fuse_get_context()->uid, fuse_get_context()->gid);
+  if (accessGrant != 0)
+    return accessGrant;
+
+  int res = open(fullPath, fi->flags);
+  if (res == -1)
+    return -errno;
+
+  close(res);
+  return 0;
+}
 ```
 
 1. Pastikan file dibuka dalam mode read-only (`O_RDONLY`).
-2. Pakai `checkAccessPerm()` untuk izin akses.
-3. Return error jika tidak diizinkan.
+2. Gunakan `checkAccessPerm()` untuk izin akses.
+3. Kembalikan error jika tidak diizinkan.
 
 ### 7. Fungsi-Fungsi yang Ditolak (Write, Modify)
 
@@ -213,9 +352,12 @@ int main(int argc, char *argv[]) {
 2. Pastikan `-o allow_other` digunakan agar semua user bisa mengakses.
 
 ### Contoh Penggunaan
+![Screenshot from 2025-06-22 20-38-22](https://github.com/user-attachments/assets/e24d6bbe-eb8e-42ca-872e-2a5451fe7f19)
+note : Ada sedikit kesalahan pada akses private_yuadi serta private_irwandi ketika mencoba sisop.txt
+
+Kesulitan : seperti yang sudah saya sampaikan pada contoh penggunaan, sampai pada detik terakhir revisi, saya masih kesulitan untuk menemukan problemnya pada bagian mana. ;_;
 
 
-Task 2 : (Naura)
 ## Task 2 : (Naura)
 
 > ### a. Ekstensi File Tersembunyi
@@ -1213,6 +1355,19 @@ int main(int argc, char *argv[]){
 ```
 
 Menjalankan filesystem dengan operasi yang telah didefinisikan.
+
+### Contoh :
+1. su - DainTontas
+Sebelum echo :
+![Screenshot from 2025-06-22 18-35-32](https://github.com/user-attachments/assets/84ad481f-7e0b-4de5-93c3-d1a8b4c435cb)
+
+Setelah echo : 
+
+![Screenshot from 2025-06-22 18-38-12](https://github.com/user-attachments/assets/ce00d774-8b35-4318-84a0-3c7183447b5f)
+
+2. selain su - DainTontas :
+![Screenshot from 2025-06-22 18-36-04](https://github.com/user-attachments/assets/2ed8b24d-02f8-422c-9759-e8fd482ab7cd)
+
 
 
 ## Task 4 (Raynald)
