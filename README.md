@@ -1,4 +1,4 @@
-[![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/V7fOtAk7)
+v[![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/V7fOtAk7)
 |    NRP     |      Name      |
 | :--------: | :------------: |
 | 5025241020 | Raynald Ramadhani Fachriansyah |
@@ -1477,6 +1477,9 @@ run:
 
 
 #### Output
+<img width="802" alt="Screenshot 2025-06-22 at 18 44 43" src="https://github.com/user-attachments/assets/d489d716-99f6-42c9-8217-1af165df1001" />
+<img width="386" alt="Screenshot 2025-06-22 at 18 46 03" src="https://github.com/user-attachments/assets/1462472d-1a49-4057-802e-21298cc04699" />
+
 
 
 
