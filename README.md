@@ -354,6 +354,7 @@ int main(int argc, char *argv[]) {
 
 ### Contoh Penggunaan
 ![Screenshot from 2025-06-22 20-38-22](https://github.com/user-attachments/assets/e24d6bbe-eb8e-42ca-872e-2a5451fe7f19)
+
 note : Ada sedikit kesalahan pada akses private_yuadi serta private_irwandi ketika mencoba sisop.txt
 
 Kesulitan : seperti yang sudah saya sampaikan pada contoh penggunaan, sampai pada detik terakhir revisi, saya masih kesulitan untuk menemukan problemnya pada bagian mana. ;_;
