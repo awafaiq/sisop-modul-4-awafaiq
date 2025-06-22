@@ -1313,7 +1313,7 @@ static int readTroll(const char *path, char *buf, size_t size, off_t offset, str
 5. Cek file yang lain dan kembalikan error jika tidak dikenal.
 6. Salin konten ke buffer dengan batasan offset dan size.
 
-### 6. FUSE Callback: write
+### 6. Fungsi write
 
 ```c
 static int writeTroll(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi){
@@ -2022,7 +2022,6 @@ run:
 #### Output
 <img width="802" alt="Screenshot 2025-06-22 at 18 44 43" src="https://github.com/user-attachments/assets/d489d716-99f6-42c9-8217-1af165df1001" />
 <img width="386" alt="Screenshot 2025-06-22 at 18 46 03" src="https://github.com/user-attachments/assets/1462472d-1a49-4057-802e-21298cc04699" />
-
 
 
 
