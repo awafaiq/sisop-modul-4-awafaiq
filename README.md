@@ -556,7 +556,7 @@ ACCESS_END=20:00
 
 ### Penjelasan Lawak.c
 
-##[e] Variabel global hasil konfigurasi eksternal
+[e] Variabel global hasil konfigurasi eksternal
 ```c
 char *filter_words[MAX_WORDS];
 int filter_word_count = 0;
@@ -585,7 +585,7 @@ Batas waktu akhir untuk akses file "secret". Default: jam 6 sore (18:00)
 - Direktori sumber data yang akan dipasangkan dengan sistem file virtual ini
 
 
-##[d] Logging Operasi Akses
+[d] Logging Operasi Akses
 ```c
 void log_action(const char *action, const char *path) {
     const char *log_path = "/var/log/lawakfs.log";
@@ -640,7 +640,7 @@ Contoh log:
 - `fclose(log);`
 Menutup file log agar tidak terjadi kebocoran file descriptor.
 
-##[a] Menghapus Ekstensi dari Nama File
+[a] Menghapus Ekstensi dari Nama File
 ```c
 void trim_extension(const char *filename, char *result) {
     strcpy(result, filename);
@@ -660,7 +660,7 @@ Fungsi strrchr mencari dari belakang, sehingga cocok untuk menemukan ekstensi fi
 Jika titik ditemukan (berarti file punya ekstensi), maka kita “memotong” string tepat di titik tersebut dengan mengubahnya menjadi null-terminator ('\0').
 Ini membuat hanya nama tanpa ekstensi yang tersisa di result.
 
-##[b] Proteksi File Secret Berdasarkan Waktu
+[b] Proteksi File Secret Berdasarkan Waktu
 1. `is_secret_file(const char *path)`
 ```c
 int is_secret_file(const char *path) {
@@ -699,7 +699,7 @@ int is_time_allowed() {
 ```
 - Mengambil waktu sekarang (`time(NULL) ` dan `localtime`) lalu periksa apakah jam saat ini masih dalam rentang access_start s.d. `access_end`.
 
-## [c] Filtering Isi File Teks & Encode Base64 untuk File Biner
+[c] Filtering Isi File Teks & Encode Base64 untuk File Biner
 
 1. `filter_text(char *buf, size_t size)`
 ```c
@@ -818,7 +818,7 @@ if (is_binary) {
 
 - Filter dan encoding dilakukan on-the-fly saat file dibaca
 
-##[e] Memuat Konfigurasi dari lawak.conf
+[e] Memuat Konfigurasi dari lawak.conf
 
 ```c
 void load_config() {
