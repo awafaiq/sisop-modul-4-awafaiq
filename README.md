@@ -915,27 +915,27 @@ Jam mulai file rahasia boleh diakses (default: 08 pagi).
 Jam akhir akses file rahasia (default: 18 sore).
 
 ## Screenshot
-[a]
+[a] Ekstensi File Tersembunyi
 - jam 10.00 - 20.00
 ![A saat jam 10 00-20 00](https://github.com/user-attachments/assets/55d802b5-650b-4040-8f82-055cd6af9199)
 
 - diluar jam 10.00-20.00
 ![A saat diluar jam 10 00-20 00](https://github.com/user-attachments/assets/0842da1d-6beb-4a6b-8ea8-2b19c09a9e77)
 
-[b]
+[b] Akses Berbasis Waktu untuk File Secret
 - jam 10.00 - 20.00
 ![secret txt rentang jam](https://github.com/user-attachments/assets/7a4ebc4c-305f-4e53-acce-1387a5a599bc)
 
 - diluar jam 10.00-20.00
 ![secret txt diluar jam](https://github.com/user-attachments/assets/32c8b334-cc55-46ea-b51c-eb759e1e2cda)
 
-[c]
+[c] Filtering Konten Dinamis
+- File Biner
 ![kelinci png](https://github.com/user-attachments/assets/ece9f0b0-a09f-4229-8819-a657e17b9b5c)
-
-[d]
+- File Teks
 ![readme txt](https://github.com/user-attachments/assets/260f0f40-65d2-4c38-9d3d-69fd3aaabbf1)
 
-[e]
+[d] Logging Akses
 ![varlog](https://github.com/user-attachments/assets/bc02ce49-306d-4dee-b7a5-8eeccccdac42)
 
 
