@@ -829,5 +829,655 @@ int main(int argc, char *argv[]){
 Menjalankan filesystem dengan operasi yang telah didefinisikan.
 
 
+## Task 4 (Raynald)
+
+> Lilhab sedang ditantang oleh Trabowo (orang yang sama yang dia temui di modul ke-1) untuk membuat kernel sederhana yang memiliki fitur piping menggunakan echo, grep, dan wc. Lilhab merasa kesulitan dan gugup karena dia pikir pekerjaannya tidak akan selesai ketika bertemu dengan deadline. Jadi, dia memutuskan untuk bertanya kepada Grok tentang tantangan tersebut dan AI tersebut memutuskan untuk mengejeknya.
+
+### _a. Implementasikan fungsi `printString`, `readString`, dan `clearScreen` di kernel.c yang akan menampilkan dan membaca string di layar._
+
+- `printString`: Menampilkan string yang diakhiri null menggunakan int 10h dengan AH=0x0E.
+- `readString`: Membaca karakter dari keyboard menggunakan int 16h dengan AH=0x00 sampai Enter ditekan. Termasuk penanganan Backspace dasar.
+- `clearScreen`: Membersihkan layar dan mengatur kursor ke pojok kiri atas (0, 0) menggunakan int 10h dengan AH=0x06 dan AH=0x02. Buffer video untuk warna karakter akan diubah menjadi putih.
+
+  **_1_**. `printstring`
+
+#### Kode
+
+```c
+void printString(char* str) {
+    int i = 0;
+    while (str[i] != '\0') {
+        interrupt(0x10, 0x0E00 + str[i], 0, 0, 0);
+        i++;
+    }
+}
+```
+
+- while (str[i] != '\0') = Looping `i` sampai mencapai `null`
+
+- interrupt(0x10, 0x0E00 + str[i], 0, 0, 0); = Menggunakan fungsi interrupt dengan format `extern int interrupt(int number, int AX, int BX, int CX, int DX);` dimana:
+
+  - 0x10 -> interrupt untuk video services.
+  - 0x0E00 -> AH untuk mencetak karakter ke layar.
+  - str[i] -> karakter yang akan ditampilkan.
+  - 0, 0, 0 -> BX, CX, DX yang tidak digunakan
+
+  **_2_**. `readstring`
+
+#### Kode
+
+```c
+void readString(char* buf) {
+    int i = 0;
+    char c;
+
+    while (1) {
+        c = interrupt(0x16, 0x0000, 0, 0, 0) & 0xFF;
+
+        if (c == 13) { //enter
+            buf[i] = '\0';
+            interrupt(0x10, 0x0E0D, 0, 0, 0);
+            interrupt(0x10, 0x0E0A, 0, 0, 0);
+            break;
+        } else if (c == 8) { //backspace
+            if (i > 0) {
+                i--;
+                interrupt(0x10, 0x0E08, 0, 0, 0);
+                interrupt(0x10, 0x0E20, 0, 0, 0);
+                interrupt(0x10, 0x0E08, 0, 0, 0);
+            }
+        } else {
+            buf[i] = c;
+            interrupt(0x10, 0x0E00 + c, 0, 0, 0); //echo input
+            i++;
+        }
+    }
+}
+```
+
+- c = interrupt(0x16, 0x0000, 0, 0, 0) & 0xFF; = Mendeklarasikan c yang diisi dengan fungsi interrupt:
+
+  - 0x16 -> Interrupt untuk keyboard services.
+  - 0x0000 -> AH untuk membaca input dari keyboard.
+  - 0, 0, 0 -> BX, CX, DX yang tidak digunakan.
+  - & 0xFF -> Mengambil byte terakhir dari hasil fungsi interrupt.
+
+- if (c == 13) = Jika input adalah 13 (ASCII code untuk enter), maka:
+
+  - buf[i] = '\0'; -> Mengakhiri string dengan null character.
+  - 0x10 -> Interrupt untuk video services.
+  - 0x0E0D -> AH untuk mencetak Carriage Return ke layar.
+  - 0x0E0A -> AH untuk mencetak Line Feed ke layar.
+
+- else if (c == 8) = Jika input adalah 8 (ASCII code untuk backspace), maka:
+
+  - 0x10 -> Interrupt untuk video services.
+  - 0x0E08 -> AH untuk mencetak Backspace ke layar.
+  - 0x0E20 -> AH untuk mencetak Spasi ke layar.
+  - 0x0E08 -> AH untuk mencetak Backspace ke layar.
+
+- else = Jika input bukan 13 atau 8, maka:
+
+  - buf[i] = c; -> Menyimpan input ke dalam buffer.
+  - 0x10 -> Interrupt untuk video services.
+  - 0x0E00 + c -> AH untuk mencetak input ke layar.
+
+  **_3_**. `clearScreen`
+
+#### Kode
+
+```c
+void clearScreen() {
+    interrupt(0x10, 0x0600, 0x0700, 0x0000, 0x184F);
+    interrupt(0x10, 0x0200, 0, 0, 0);
+}
+```
+
+- interrupt:
+  - 0x10 -> Interrupt untuk video services.
+  - 0x0600 → AH 0x06 (clear screen), AL = 0x00 (clear semua baris).
+  - 0x0700 → BH 0x07 (atribut karakter: putih di atas hitam).
+  - CX = 0x0000 → baris mulai dari (0,0).
+  - DX = 0x184F → baris sampai (24,79) → area layar penuh (25 baris, 80 kolom).
+  - 0x0200 → AH 0x02 (set cursor position).
+
+---
+
+### _b. Lengkapi implementasi fungsi-fungsi di std_lib.h dalam std_lib.c._
+
+Fungsi-fungsi di atas dapat digunakan untuk menyederhanakan implementasi fungsi printString, readString, clearScreen, dan fungsi-fungsi lebih lanjut yang dijelaskan pada tugas berikutnya.
+
+**_1_**. `div`
+
+#### Kode
+
+```c
+int div(int a, int b) {
+    int d = 0;
+    while (a >= b) {
+        a -= b;
+        d++;
+    }
+    return d;
+}
+```
+
+- int d = 0; -> Menyimpan hasil akhir (jumlah berapa kali b bisa dikurangkan dari a).
+- while (a >= b) -> Loop selama a masih lebih besar atau = b.
+- a -= b; -> Kurangkan b dari a.
+- d++; -> Tambah penghitung hasil (d) setiap kali pengurangan berhasil.
+- return d; -> Kembalikan jumlah pengurangan sebagai hasil pembagian bulat.
+
+**_2_**. `mod`
+
+#### Kode
+
+```c
+int mod(int a, int b) {
+    while (a >= b) {
+        a -= b;
+    }
+    return a;
+}
+```
+
+- while (a >= b) -> Loop selama a masih lebih besar atau = b.
+- a -= b; -> Kurangkan a dengan b.
+- return a; -> Kembalikan nilai a sebagai sisa pembagian.
+
+**_3_**. `memcpy`
+
+#### Kode
+
+```c
+void memcpy(byte* src, byte* dst, unsigned int size) {
+    unsigned int i;
+    for (i = 0; i < size; i++) {
+        dst[i] = src[i];
+    }
+}
+```
+
+- loop for -> loop i sampai kurang dari size.
+- dst[i] = src[i]; -> salin nilai src ke dst.
+
+**_4_**. `strlen`
+
+#### Kode
+
+```c
+unsigned int strlen(char* str) {
+    unsigned int len = 0;
+    while (str[len] != '\0') {
+        len++;
+    }
+    return len;
+}
+```
+
+- while (str[len] != '\0') -> Loop selama karakter di str tidak sama dengan '\0.
+- len++; -> Increment len.
+- return len; -> Kembalikan nilai len sebagai nilai panjang string.
+
+**_5_**. `strcmp`
+
+```c
+bool strcmp(char* str1, char* str2) {
+    int i = 0;
+    while (str1[i] != '\0' && str2[i] != '\0') {
+        if (str1[i] != str2[i]) {
+            return false;
+        }
+        i++;
+    }
+    return (str1[i] == '\0' && str2[i] == '\0');
+}
+```
+
+- if (str1[i] != str2[i]) -> Jika karakter di str1 dan str2 tidak sama, return false.
+- i++; -> Increment i, sebagai penanda posisi karakter.
+
+**_6_**. `strcpy`
+
+#### Kode
+
+```c
+void strcpy(char* src, char* dst) {
+    int i = 0;
+    while (src[i] != '\0') {
+        dst[i] = src[i];
+        i++;
+    }
+    dst[i] = '\0';
+}
+```
+
+- dst[i] = src[i]; -> Salin nilai src ke dst.
+- dst[i] = '\0'; -> Setelah mencapai akhir string, tambahkan '\0' untuk menandakan akhir string.
+
+**_7_**. `clear`
+
+#### Kode
+
+```c
+void clear(byte* buf, unsigned int size) {
+    unsigned int i;
+    for (i = 0; i < size; i++) {
+        buf[i] = 0x00;
+    }
+}
+```
+
+- loop i -> loop i dari index 0 sampai kurang dari size.
+- buf[i] = 0x00; -> Setiap byte di buf menjadi 0x00.
+
+---
+
+### _c. Implementasikan perintah `echo`_
+
+Perintah ini mengambil argumen yang diberikan (karakter keyboard) untuk perintah echo dan mencetaknya ke shell.
+
+#### Kode Fungsi
+
+```c
+void EchoFunction(char* Input, char* buf) {
+    int r = 5;
+    while (Input[r] == ' ') {
+        r++;
+    }
+    strcpy(Input + r, buf);
+}
+```
+
+- r = 5 -> Inisialisasikan r dengan 5 (huruf e sampai spasi).
+- r++ -> Skip spasi setelah 'echo'.
+- strcpy(Input + r, buf); -> Salin isi buf ke Input + r (setelah 'echo').
+
+#### Implementasi di main
+
+```c
+if (strcmp(cmd, "echo"))
+    {
+        char temp[128];
+        EchoFunction(buf, temp);
+        printString(temp);
+        printString("\n");
+    }
+```
+
+- if (strcmp(cmd, "echo")) -> Jika cmd sama dengan "echo".
+- EchoFunction(buf, temp); -> Jalankan fungsi EchoFunction dengan argumen buf dan temp.
+- printString(temp); -> Cetak string temp ke shell.
+
+---
+
+### _d. Implementasikan perintah `grep`_
+
+Perintah ini mencari baris yang cocok dengan pola dalam inputnya dan mencetak baris yang cocok. grep hanya akan mengambil satu argumen menggunakan piping (|) dari perintah echo. Output harus berupa bagian dari argumen yang di-pipe yang diteruskan ke grep. Jika argumen tidak cocok, mengembalikan NULL
+
+#### Kode
+
+```c
+void grepFunction(char* buf, char* pattern) {
+    int lenbuf = strlen(buf);
+    int lenpat = strlen(pattern);
+    int found = 0;
+    int c, d;
+    int i;
+
+    for (c = 0; c <= (lenbuf - lenpat); c++) {
+        int match = 1;
+        for (d = 0; d < lenpat; d++) {
+            if (buf[c + d] != pattern[d]) {
+                match = 0;
+                break;
+            }
+        }
+
+        if (match) {
+            found = 1;
+            for (i = 0; i < lenpat; i++) {
+                buf[i] = pattern[i];  // copy pattern dari pattern ke buf, hanya bagian match
+            }
+            buf[lenpat] = '\0';
+
+            printString(buf);
+            printString("\n");
+            return;
+        }
+    }
+
+    // kalau tidak ditemukan
+    buf[0] = 'N';
+    buf[1] = 'U';
+    buf[2] = 'L';
+    buf[3] = 'L';
+    buf[4] = '\0';
+
+    printString("NULL\n");
+}
+```
+
+- loop c -> mencari posisi awal dari pattern di string dari index 0 sampai lenbuf - lenpat.
+- loop d -> membandingkan karakter demi karakter antara string dan pattern.
+- jika match, copy pattern ke string dan cetak string tersebut.
+- jika tidak match, cetak NULL.
+
+---
+
+### _e. Implementasikan perintah `wc`_
+
+Perintah ini menghitung baris, kata, dan karakter dalam inputnya. wc tidak memerlukan argumen karena mendapat input dari pipe (|) dari perintah sebelumnya. Output harus berupa hitungan akhir dari argumen yang di-pipe yang diteruskan ke wc. Jika argumen tidak cocok, mengembalikan NULL atau 0
+
+#### Kode
+
+```c
+void wcFuntion(char* buf) {
+    int i;
+    int len = 0;
+    int kata = 0;
+    int start = -1;
+    int end = -1;
+
+    for (i = 0; buf[i] != '\0'; i++) {
+        if (buf[i] != ' ') {
+            if (start == -1) {
+                start = i;
+            }
+            end = i;
+
+            if (i == 0 || buf[i - 1] == ' ') {
+                kata++;
+            }
+        }
+    }
+
+    if (start != -1 && end != -1) {
+        len = end - start + 1;
+    }
+
+    if (len == 0) {
+        printString("0 Karakter\n");
+    } else {
+        char s[8];
+        int x = len;
+        int index = 0;
+
+        while (x > 0) {
+            s[index] = mod(x, 10) + '0';
+            x = div(x, 10);
+            index++;
+        }
+
+        for (i = index - 1; i >= 0; i--) {
+            char ch[2];
+            ch[0] = s[i];
+            ch[1] = '\0';
+            printString(ch);
+        }
+        printString(" Karakter\n");
+    }
+
+    if (kata == 0) {
+        printString("0 Kata\n");
+    } else {
+        char s[8];
+        int x = kata;
+        int index = 0;
+
+        while (x > 0) {
+            s[index] = mod(x, 10) + '0';
+            x = div(x, 10);
+            index++;
+        }
+
+        for (i = index - 1; i >= 0; i--) {
+            char ch[2];
+            ch[0] = s[i];
+            ch[1] = '\0';
+            printString(ch);
+        }
+        printString(" Kata\n");
+    }
+    printString("1 Baris\n");
+}
+```
+
+- for (i = 0; buf[i] != '\0'; i++) -> Menelusuri seluruh isi string buf.
+
+- if (buf[i] != ' ') -> Jika karakter bukan spasi, artinya bagian dari kata atau isi.
+
+- if (start == -1) start = i; -> Tandai awal isi teks pertama kali ditemukan.
+
+- end = i; -> Tandai indeks terakhir dari isi teks.
+
+- if (i == 0 || buf[i - 1] == ' ') kata++; -> Setiap kali huruf muncul setelah spasi, berarti itu awal kata baru → hitung kata++.
+
+- if (start != -1 && end != -1) {len = end - start + 1;} -> Spasi di awal dan akhir tidak dihitung.
+
+- Jika ada len dan kata ada -> len dan kata dikonversi ke string menggunakan fungsi `mod` dan `div` lalu diprint satu2.
+
+- printString("1 Baris\n"); -> Print 1 baris karena input selalu hanya bisa 1 baris.
+
+### Implementasi Fungsi `grepFunction` dan `wcFunction`.
+
+**_1._** Pisahkan Pipe
+
+```c
+int pisahCMD(char* input, char cmds[][128]) {
+    int count = 0;
+    int i = 0, j = 0;
+
+    while (1) {
+        if (input[i] == '|' || input[i] == '\0')
+        {
+            cmds[count][j] = '\0'; //end string
+            count++;
+            j = 0;
+            if (input[i] == '\0') break;
+            i++;
+            while (input[i] == ' ') i++; //skip space
+        } else {
+            cmds[count][j++] = input[i++];
+        }
+    }
+    return count;
+}
+```
+
+- cmds[count][j] = `\0` -> Menandai akhir string lalu count di-increment.
+- cmds[count][j++] = input[i++]; -> Menambahkan karakter ke array cmds.
+- return count -> Return jumlah komponen yang dipisahkan Pipe
+
+**_2._** Gunakan fungsi berikut untuk eksekusi command pertama dan kedua
+
+```c
+void SecondCMD(char* Input) {
+    char cmds[4][128];
+    char buf[128];
+    int i;
+    int count;
+
+    count = pisahCMD(Input, cmds);
+
+    for (i = 0; i < count; i++)
+    {
+        char cmd[16];
+        char isi[128];
+        int j = 0;
+        int k = 0;
+
+
+        while (cmds[i][j] != ' ' && cmds[i][j] != '\0') {
+            cmd[k++] = cmds[i][j++];
+        }
+        cmd[k] = '\0';
+
+        while (cmds[i][j] == ' ') {
+            j++;
+        }
+        strcpy(cmds[i] + j, isi);
+
+        if (strcmp(cmd, "echo")) {
+            int r = 0;
+            while (isi[r] == ' '){
+                r++;
+            }
+            strcpy(isi + r, buf);
+        }
+        else if (strcmp(cmd, "grep")) {
+            grepFunction(buf, isi);
+        } else if (strcmp(cmd, "wc")) {
+            wcFuntion(buf);
+        } else {
+            printString("Command tidak diketahui\n");
+            break;
+        }
+    }
+}
+```
+
+- count = Jumlah command terpisah yang sudah difilter menggunakan `pisahCMD`.
+
+- while (cmds[i][j] != ' ' && cmds[i][j] != '\0') {cmd[k++] = cmds[i][j++];} cmd[k] = '\0'; -> Mengambil command dari string yang sudah terpisah.
+
+- while (cmds[i][j] == ' ') {j++;} strcpy(cmds[i] + j, isi); -> Mengambil isi dari string yang sudah terpisah.
+
+- Gunakan fungsi yang sudah dibuat untuk mengolah command yang diinputkan menggunakan `strcmp`.
+
+**_3._** Implementasi di main
+
+```c
+int main() {
+    char buf[128];
+    int i;
+
+    clearScreen();
+    printString("LilHabOS - B11\n");
+
+    while (true) {
+        printString("$> ");
+        readString(buf);
+        printString("\n");
+
+        if (strlen(buf) > 0) {
+            int isPipe = 0;
+            for (i = 0; buf[i] != '\0'; i++) //cek apakah pipe ato ga
+            {
+                if (buf[i] == '|')
+                {
+                    isPipe = 1;
+                }
+            }
+
+            if (isPipe) { //kalo pipe
+                SecondCMD(buf);
+            } else { //kalo ga pipe
+                char cmd[128];
+                int j = 0;
+
+                while (buf[j] != ' ' && buf[j] != '\0') {
+                    cmd[j] = buf[j];
+                    j++;
+                }
+                cmd[j] = '\0';
+
+                if (strcmp(cmd, "echo"))
+                {
+                    char temp[128];
+                    EchoFunction(buf, temp);
+                    printString(temp);
+                    printString("\n");
+                } else if (strcmp(cmd, "clear"))
+                {
+                    clearScreen();
+                } else {
+                    printString("Command tidak dipahami\n");
+                }
+            }
+        }
+    }
+}
+```
+
+- char cmd[128];
+  int j = 0;
+  while (buf[j] != ' ' && buf[j] != '\0') {
+  cmd[j] = buf[j];
+  j++;
+  }
+  cmd[j] = '\0';
+
+  -> Mengambil kalimat pertama dari input, lalu akan diteruskan ke permisalan yang akan mengeksekusi fungsi.
+
+---
+
+### _f. Buat otomatisasi untuk mengompilasi dengan melengkapi file makefile._
+
+Untuk mengompilasi program, perintah make build akan digunakan. Semua hasil program yang dikompilasi akan disimpan di direktori bin/. Untuk menjalankan program, perintah make run akan digunakan.
+
+#### Kode
+
+```makefile
+prepare:
+	mkdir -p bin
+
+bootloader:
+	nasm -f bin src/bootloader.asm -o bin/bootloader
+
+stdlib:
+	bcc -ansi -c -Iinclude src/std_lib.c -o bin/std_lib.o
+
+kernel:
+	bcc -ansi -c -Iinclude src/kernel.c -o bin/kernel.o
+	nasm -f as86 src/kernel.asm -o bin/kernel_asm.o
+
+link:
+	ld86 -o bin/kernel-load -d bin/kernel.o bin/std_lib.o bin/kernel_asm.o
+	dd if=bin/bootloader of=bin/floppy.img bs=512 count=1 conv=notrunc
+	dd if=bin/kernel-load of=bin/floppy.img bs=512 seek=1 conv=notrunc
+
+build: prepare bootloader stdlib kernel link
+
+run:
+	bochs -f bochsrc.txt
+
+```
+
+#### Referensi Perintah
+
+- dd
+  -> dd if=<input_file> of=<output_file> bs=<block_size> count=<block_count> seek=<seek_count> conv=<conversion>
+
+- nasm
+  -> nasm -f <format> <input_file> -o <output_file>
+
+- bcc
+  -> bcc -ansi -c <input_file> -o <output_file>
+
+- ld86
+  -> ld86 -o <output_file> -d [file1.o file2.o ...]
+
+#### Penjelasan Kode
+
+- prepare -> Membuat direktori bin jika belum ada.
+
+- bootloader -> Mengompilasi bootloader.asm menjadi
+  bootloader.bin di direktori bin/ menggunakan nasm.
+
+- stdlib -> Mengompilasi std_lib.c menjadi std_lib.o di direktori bin/ menggunakan bcc.
+
+- kernel -> Mengompilasi kernel.c menjadi kernel.o di direktori bin/ menggunakan bcc dan mengompilasi kernel.asm menjadi kernel_asm.o di direktori bin/ menggunakan nasm.
+
+- link -> Menggabungkan bootloader.bin, kernel.o, kernel_asm.o, dan std_lib.o menjadi floppy.img menggunakan Id86.
+
+- build -> Menjalankan perintah prepare, bootloader, stdlib, kernel, dan link.
+- run -> Menjalankan Bochs dengan k
+  onfigurasi bochsrc.txt.
+
+
+#### Output
+
+
 
 
