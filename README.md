@@ -553,6 +553,367 @@ SECRET_FILE_BASENAME=secret
 ACCESS_START=08:00
 ACCESS_END=20:00
 ```
+
+### Penjelasan Lawak.c
+
+##[e] Variabel global hasil konfigurasi eksternal
+```c
+char *filter_words[MAX_WORDS];
+int filter_word_count = 0;
+char secret_name[256] = "secret"; // default, akan di-overwrite dari lawak.conf
+int access_start = 8;
+int access_end = 18;
+char source_dir[MAX_PATH];
+```
+
+- `char *filter_words[MAX_WORDS];`
+Array pointer ke kata-kata yang akan difilter dari file teks (misalnya: "ducati", "mu")
+
+- `int filter_word_count = 0;`
+Menyimpan jumlah kata dalam filter_words[]
+
+- `char secret_name[256] = "secret";`
+Nama file yang akan dianggap sebagai "secret". Nilai default adalah "secret", tetapi bisa diubah lewat lawak.conf (parameter SECRET_FILE_BASENAME)
+
+- `int access_start = 8;`
+Batas waktu mulai untuk akses file "secret". Default: jam 8 pagi (08:00)
+
+- `int access_end = 18;`
+Batas waktu akhir untuk akses file "secret". Default: jam 6 sore (18:00)
+
+`char source_dir[MAX_PATH];`
+- Direktori sumber data yang akan dipasangkan dengan sistem file virtual ini
+
+
+##[d] Logging Operasi Akses
+```c
+void log_action(const char *action, const char *path) {
+    const char *log_path = "/var/log/lawakfs.log";
+    FILE *log = fopen(log_path, "a"); // membuka file log dalam mode append
+
+    if (!log) {
+        fprintf(stderr, "Log error: Cannot open %s\n", log_path);
+        return;
+    }
+
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    uid_t uid = getuid();
+
+    fprintf(log, "[%04d-%02d-%02d %02d:%02d:%02d] [%d] [%s] %s\n",
+            t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
+            t->tm_hour, t->tm_min, t->tm_sec,
+            uid, action, path);
+
+    fclose(log); // tutup file log
+}
+```
+
+- `const char *log_path = "/var/log/lawakfs.log";`
+- Path lokasi log disimpan. File ini berada di sistem /var/log/, jadi butuh izin root untuk menulis ke sana.
+
+- `FILE *log = fopen(log_path, "a");`
+Membuka file log dalam mode append (menambahkan baris baru tanpa menghapus sebelumnya).
+
+- `if (!log) {...}`
+Jika file tidak bisa dibuka (misalnya karena tidak ada izin), maka tampilkan error ke stderr, lalu keluar dari fungsi.
+
+- `time_t now = time(NULL);`
+Mengambil waktu saat ini dalam bentuk epoch time (jumlah detik sejak 1970).
+
+- `struct tm *t = localtime(&now);`
+Mengubah epoch time ke struktur waktu lokal (struct tm), supaya bisa dipecah jadi tahun, bulan, tanggal, jam, menit, detik.
+
+- `uid_t uid = getuid();`
+Mendapatkan User ID (UID) dari user yang sedang menjalankan program ini.
+
+- `fprintf(log, "...", ...)`
+
+Menuliskan log ke file dalam format berikut:
+```
+[YYYY-MM-DD HH:MM:SS] [UID] [ACTION] /path/to/file
+```
+Contoh log:
+```
+[2025-06-22 17:02:11] [1000] [READ] /data/secret.txt
+```
+- `fclose(log);`
+Menutup file log agar tidak terjadi kebocoran file descriptor.
+
+##[a] Menghapus Ekstensi dari Nama File
+```c
+void trim_extension(const char *filename, char *result) {
+    strcpy(result, filename);
+    char *dot = strrchr(result, '.');
+    if (dot) *dot = '\0';
+}
+```
+
+- `strcpy(result, filename);`
+Salin isi filename ke buffer result. Ini penting agar kita bisa memodifikasi result tanpa merusak input asli.
+
+- `char *dot = strrchr(result, '.');`
+Mencari posisi terakhir titik ('.') dalam nama file.
+Fungsi strrchr mencari dari belakang, sehingga cocok untuk menemukan ekstensi file seperti .txt, .jpg, dll.
+
+- `if (dot) *dot = '\0';`
+Jika titik ditemukan (berarti file punya ekstensi), maka kita “memotong” string tepat di titik tersebut dengan mengubahnya menjadi null-terminator ('\0').
+Ini membuat hanya nama tanpa ekstensi yang tersisa di result.
+
+##[b] Proteksi File Secret Berdasarkan Waktu
+1. `is_secret_file(const char *path)`
+```c
+int is_secret_file(const char *path) {
+    const char *p = strrchr(path, '/');
+    if (!p) p = path;
+    else p++;
+
+    return strncmp(p, secret_name, strlen(secret_name)) == 0 &&
+           (p[strlen(secret_name)] == '.' || p[strlen(secret_name)] == '\0');
+}
+```
+
+- `const char *p = strrchr(path, '/');`
+Mencari karakter / terakhir dalam path untuk mengambil basename (nama file saja, tanpa folder).
+
+- `if (!p) p = path; else p++;`
+Jika tidak ada /, berarti path itu langsung nama file (misal "secret.txt"). Jika ada, p digeser satu karakter ke kanan untuk mulai dari nama file-nya.
+
+- `strncmp(p, secret_name, strlen(secret_name)) == 0`
+Mengecek apakah nama file dimulai dengan secret_name (default "secret"). Jadi secret.txt, secret.png, dan secret akan cocok.
+
+- `(p[strlen(secret_name)] == '.' || p[strlen(secret_name)] == '\0')`
+Pastikan setelah nama `secret`, hanya boleh:
+
+    - Titik (`.`) -> berarti ekstensi, atau
+
+    - Null terminator -> berarti nama file pas `"secret"` tanpa ekstensi.
+
+2. `is_time_allowed()`
+```c
+int is_time_allowed() {
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    return t->tm_hour >= access_start && t->tm_hour < access_end;
+}
+```
+- Mengambil waktu sekarang (`time(NULL) ` dan `localtime`) lalu periksa apakah jam saat ini masih dalam rentang access_start s.d. `access_end`.
+
+## [c] Filtering Isi File Teks & Encode Base64 untuk File Biner
+
+1. `filter_text(char *buf, size_t size)`
+```c
+void filter_text(char *buf, size_t size) {
+    char *newbuf = malloc(size * 2);
+    newbuf[0] = '\0';
+    size_t offset = 0;
+
+    for (char *p = buf; *p;) {
+        int matched = 0;
+        for (int i = 0; i < filter_word_count; ++i) {
+            size_t wlen = strlen(filter_words[i]);
+            if (strncasecmp(p, filter_words[i], wlen) == 0) {
+                strcpy(newbuf + offset, "lawak");
+                offset += 5;
+                p += wlen;
+                matched = 1;
+                break;
+            }
+        }
+        if (!matched) {
+            newbuf[offset++] = *p++;
+        }
+    }
+
+    newbuf[offset] = '\0';
+    strcpy(buf, newbuf);
+    free(newbuf);
+}
+```
+- `malloc(size * 2)` -> Alokasi buffer baru 2x ukuran teks asli (untuk jaga-jaga setelah sensor).
+
+- Loop utama: membaca karakter demi karakter dari `buf`.
+
+Jika ditemukan kata dari `filter_words[]`, maka diganti dengan `"lawak"`.
+
+- Copy hasil akhirnya ke buffer asli `buf`.
+
+Contoh:
+
+File berisi: `aku suka ferrari dan mu`
+
+Setelah filter: `aku suka lawak dan lawak`
+
+2. `encode_base64(FILE *in, char *out, size_t outsize)`
+```c
+void encode_base64(FILE *in, char *out, size_t outsize) {
+    unsigned char buf[3];
+    int len;
+    size_t outlen = 0;
+
+    while ((len = fread(buf, 1, 3, in)) > 0) {
+        if (outlen + 4 >= outsize) break;
+        out[outlen++] = b64chars[buf[0] >> 2];
+        out[outlen++] = b64chars[((buf[0] & 3) << 4) | ((buf[1] & 0xf0) >> 4)];
+        out[outlen++] = (len > 1) ? b64chars[((buf[1] & 0xf) << 2) | ((buf[2] & 0xc0) >> 6)] : '=';
+        out[outlen++] = (len > 2) ? b64chars[buf[2] & 0x3f] : '=';
+    }
+    out[outlen] = '\0';
+}
+```
+- Membaca input file 3 byte per blok.
+
+- Mengubahnya ke format base64 dengan 4 karakter.
+
+- Jika kurang dari 3 byte, diberi padding `=`.
+
+Base64 digunakan karena FUSE tidak bisa menampilkan byte biner mentah secara aman — dengan encoding, semua karakter menjadi ASCII printable.
+
+3. Digunakan di `x_read()`
+```c
+// membaca file
+FILE *f = fopen(fpath, "rb");
+fseek(f, 0, SEEK_END);
+size_t len = ftell(f);
+rewind(f);
+char *tmp = malloc(len + 1);
+fread(tmp, 1, len, f);
+
+// deteksi biner
+int is_binary = 0;
+for (size_t i = 0; i < len; ++i) {
+    if (tmp[i] == '\0' || tmp[i] > 127) {
+        is_binary = 1;
+        break;
+    }
+}
+
+if (is_binary) {
+    rewind(f);
+    char *encoded = malloc(len * 2);
+    encode_base64(f, encoded, len * 2);
+    memcpy(buf, encoded + offset, size);
+    free(encoded);
+} else {
+    filter_text(tmp, len);
+    memcpy(buf, tmp + offset, size);
+}
+```
+
+- File dibaca penuh ke buffer `tmp`.
+
+- Cek apakah ada karakter NULL atau non-ASCII (di atas 127) -> kalau iya → file dianggap biner.
+
+- Jika biner -> encode base64.
+
+- Jika teks -> lakukan filter kata.
+
+- Setelah diproses, hasilnya dicopy ke `buf`, memperhitungkan `offset`.
+
+**Ringkasan:**
+
+- Teks -> difilter (misalnya “mu” jadi “lawak”)
+
+- Biner -> base64 supaya aman ditampilkan
+
+- Filter dan encoding dilakukan on-the-fly saat file dibaca
+
+##[e] Memuat Konfigurasi dari lawak.conf
+
+```c
+void load_config() {
+    FILE *f = fopen("lawak.conf", "r");
+    if (!f) return;
+
+    char line[1024];
+    while (fgets(line, sizeof(line), f)) {
+        if (strncmp(line, "FILTER_WORDS=", 13) == 0) {
+            char *tok = strtok(line + 13, ",\n");
+            while (tok) {
+                filter_words[filter_word_count++] = strdup(tok);
+                tok = strtok(NULL, ",\n");
+            }
+        } else if (strncmp(line, "SECRET_FILE_BASENAME=", 22) == 0) {
+            sscanf(line + 22, "%s", secret_name);
+        } else if (strncmp(line, "ACCESS_START=", 13) == 0) {
+            sscanf(line + 13, "%d", &access_start);
+        } else if (strncmp(line, "ACCESS_END=", 11) == 0) {
+            sscanf(line + 11, "%d", &access_end);
+        }
+    }
+    fclose(f);
+}
+```
+
+- `FILE *f = fopen("lawak.conf", "r");`
+Membuka file konfigurasi bernama lawak.conf untuk dibaca.
+
+- `if (!f) return;`
+Jika file tidak ditemukan atau tidak bisa dibuka, maka abaikan konfigurasi dan gunakan nilai default.
+
+- `while (fgets(line, sizeof(line), f))`
+Baca file baris demi baris.
+
+**Parsing Konfigurasi**
+1. `FILTER_WORDS=mu,ferrari,onic`
+```c
+if (strncmp(line, "FILTER_WORDS=", 13) == 0) {
+    char *tok = strtok(line + 13, ",\n");
+    while (tok) {
+        filter_words[filter_word_count++] = strdup(tok);
+        tok = strtok(NULL, ",\n");
+    }
+}
+```
+
+- Ambil substring setelah `FILTER_WORDS=`
+
+- Pisahkan berdasarkan koma
+
+- Simpan tiap kata ke `filter_words[]`
+
+- Gunakan `strdup untuk menyimpan salinan string
+
+2. `SECRET_FILE_BASENAME=secret`
+```c
+else if (strncmp(line, "SECRET_FILE_BASENAME=", 22) == 0) {
+    sscanf(line + 22, "%s", secret_name);
+}
+```
+
+- Ekstrak nama file “secret” yang akan dibatasi aksesnya
+
+- Disimpan ke variabel `secret_name`
+
+3. `ACCESS_START=08`
+```c
+else if (strncmp(line, "ACCESS_START=", 13) == 0) {
+    sscanf(line + 13, "%d", &access_start);
+}
+```
+- Baca jam awal akses file secret
+
+4. ACCESS_END=18
+```c
+else if (strncmp(line, "ACCESS_END=", 11) == 0) {
+    sscanf(line + 11, "%d", &access_end);
+}
+```
+- Baca jam akhir akses file secret
+
+## Penjelasan lawak.conf
+- `FILTER_WORDS=`
+Daftar kata yang akan difilter dari file teks dan diganti dengan "lawak".
+
+- `SECRET_FILE_BASENAME=secret`
+Nama file yang dianggap rahasia, hanya bisa diakses di waktu tertentu.
+
+- `ACCESS_START=08:00`
+Jam mulai file rahasia boleh diakses (default: 08 pagi).
+
+- `ACCESS_END=18:00`
+Jam akhir akses file rahasia (default: 18 sore).
+
 ### Task 3 : (Faiq) — Drama Troll
 
 #### a. Pembuatan User
