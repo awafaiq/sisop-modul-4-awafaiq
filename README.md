@@ -46,6 +46,7 @@ Jika kita `ls /mnt/secure_fs`, maka akan muncul:
 * `public/`
 * `private_yuadi/`
 * `private_irwandi/`
+* 
 ![sisop-modul4-1-b](https://github.com/user-attachments/assets/11f79c44-1c3a-4f4f-bfe7-01e3fa4842ae)
 
 
