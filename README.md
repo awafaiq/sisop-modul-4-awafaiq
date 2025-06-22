@@ -21,6 +21,199 @@
 
 ### Laporan Resmi Praktikum Modul 4 _(Module 4 Lab Work Report)_
 
+### Task 1 : (Yuadi) — FUSecure
+
+#### a. Pembuatan User dan Struktur Folder
+
+Buat 2 user di sistem yang akan berperan sebagai pemilik data:
+
+* `yuadi` → pemilik folder `private_yuadi`
+* `irwandi` → pemilik folder `private_irwandi`
+
+Struktur folder yang digunakan dalam source directory `/home/shared_files`:
+
+* `public/` → folder umum yang bisa diakses siapa pun
+* `private_yuadi/` → hanya bisa dibaca oleh user `yuadi`
+* `private_irwandi/` → hanya bisa dibaca oleh user `irwandi`
+
+User ditambahkan menggunakan `useradd` dan diberi password via `passwd`.
+
+#### b. FUSE Mount Point
+
+Sistem file FUSE dimount ke `/mnt/secure_fs` dan akan merefleksikan isi dari `/home/shared_files`.
+
+Jika kita `ls /mnt/secure_fs`, maka akan muncul:
+* `public/`
+* `private_yuadi/`
+* `private_irwandi/`
+
+#### c. Read-Only System
+
+Seluruh sistem FUSE ini bersifat read-only, artinya:
+
+* Tidak ada user (termasuk root) yang bisa melakukan `mkdir`, `rmdir`, `touch`, `rm`, `cp`, `mv`, atau memodifikasi file apa pun.
+* Semua operasi write atau modify ditolak dengan `Permission denied`.
+
+#### d. Akses ke Folder Public
+
+Semua user dapat membaca file dari folder `public`.
+
+Misal: 
+```bash
+cat /mnt/secure_fs/public/materi_algoritma.txt
+```
+
+Akan berhasil untuk user manapun, termasuk `yuadi`, `irwandi`, bahkan user lain.
+
+#### e. Akses ke Folder Private
+
+* File dalam `private_yuadi/` hanya dapat dibaca oleh user `yuadi`.
+* File dalam `private_irwandi/` hanya dapat dibaca oleh user `irwandi`.
+
+Jika user lain mencoba membaca file di folder yang bukan miliknya, maka akan gagal dengan `Permission denied`.
+
+### 1. Header dan Library
+
+```c
+#define FUSE_USE_VERSION 28
+```
+
+Gunakan FUSE versi 28 sesuai modul.
+
+```c
+#include <dirent.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <fuse.h>
+#include <linux/limits.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <unistd.h>
+```
+
+Mengimpor semua library yang dibutuhkan untuk operasi file dan direktori.
+
+```c
+static const char *source_path = "/home/shared_files";
+```
+
+Menentukan direktori tempat data sebenarnya disimpan.
+
+### 2. Fungsi Support
+
+```c
+void mkdir_mountpoint(const char *path)
+```
+
+Membuat folder mount point jika belum ada.
+
+```c
+static int checkAccessPerm(const char *path, uid_t uid, gid_t gid)
+```
+
+Cek apakah user berhak mengakses file berdasarkan path:
+- `/private_yuadi/` - hanya UID 1001 (`yuadi`)
+- `/private_irwandi/` - hanya UID 1002 (`irwandi`)
+- `public/` -  bebas akses
+
+### 3. Fungsi getattr
+
+```c
+static int xmp_getattr(const char *path, struct stat *stbuf)
+```
+
+1. Bangun path absolut file di source directory.
+2. Ambil informasi metadata file menggunakan `lstat`.
+3. Kembalikan data ke FUSE.
+
+### 4. Fungsi readdir
+
+```c
+static int xmp_readdir(const char *path, void *buf, fuse_fill_dir_t filler, ...)
+```
+
+1. Menerjemahkan direktori FUSE ke direktori nyata (`source_path + path`).
+2. Menggunakan `opendir` dan `readdir` untuk membaca isi direktori.
+3. Mengisi buffer FUSE dengan nama-nama file dan folder yang ditemukan.
+
+### 5. Fungsi read
+
+```c
+static int xmp_read(const char *path, char *buf, size_t size, off_t offset, ...)
+```
+
+1. Cek apakah user boleh membaca file tersebut (`checkAccessPerm()`).
+2. Jika diizinkan, buka file dengan `open`.
+3. Baca isinya ke buffer menggunakan `pread`.
+
+### 6. Fungsi open
+
+```c
+static int xmp_open(const char *path, struct fuse_file_info *fi)
+```
+
+1. Pastikan file dibuka dalam mode read-only (`O_RDONLY`).
+2. Pakai `checkAccessPerm()` untuk izin akses.
+3. Return error jika tidak diizinkan.
+
+### 7. Fungsi-Fungsi yang Ditolak (Write, Modify)
+
+Semua fungsi yang memodifikasi file ditolak dengan:
+
+```c
+return -EACCES;
+```
+
+Fungsi yang ditolak antara lain:
+* `xmp_write`
+* `xmp_create`
+* `xmp_unlink`
+* `xmp_mkdir`
+* `xmp_rmdir`
+* `xmp_rename`
+* `xmp_truncate`
+* `xmp_utimens`
+* `xmp_chmod`
+* `xmp_chown`
+
+### 8. Registrasi Operasi FUSE
+
+```c
+static struct fuse_operations xmp_oper = {
+    .getattr = xmp_getattr,
+    .readdir = xmp_readdir,
+    .read    = xmp_read,
+    .open    = xmp_open,
+    .write   = xmp_write,
+    ...
+};
+```
+
+1. Menghubungkan semua fungsi handler ke operasi FUSE yang sesuai.
+
+### 9. Fungsi Main
+
+```c
+int main(int argc, char *argv[]) {
+    umask(0);
+    if (argc < 4) {
+        fprintf(stderr, "Usage: %s <mountpoint> [-o allow_other] [-f] [-d]
+", argv[0]);
+        return 1;
+    }
+    return fuse_main(argc, argv, &xmp_oper, NULL);
+}
+```
+
+1. Jalankan FUSE dengan argumen yang diberikan.
+2. Pastikan `-o allow_other` digunakan agar semua user bisa mengakses.
+
+### Contoh Penggunaan
+
 
 Task 2 : (Naura)
 ## Task 2 : (Naura)
@@ -611,7 +804,7 @@ static int writeTroll(const char *path, const char *buf, size_t size, off_t offs
 1. Cast `fi` ke void.
 2. Jika user dan konten sesuai, jebakan diaktifkan.
 
-### 7. Fungsi FUSE Bind
+### 7. Registrasi Operasi FUSE
 
 ```c
 static struct fuse_operations DainTontas_Operation = {
