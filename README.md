@@ -360,7 +360,280 @@ SECRET_FILE_BASENAME=secret
 ACCESS_START=08:00
 ACCESS_END=20:00
 ```
+### Task 3 : (Faiq) — Drama Troll
 
+#### a. Pembuatan User
+
+Buat 3 user di sistem sebagai berikut yang merepresentasikan aktor-aktor yang terlibat dalam trolling kali ini, yaitu:
+
+* `DainTontas` → target utama troll.
+* `SunnyBolt` dan `Ryeku` → dalang di balik jebakan.
+
+User ditambahkan menggunakan `useradd` dan diberi password via `passwd`.
+
+#### b. Jebakan Troll
+
+Filesystem FUSE dibuat dan dimount ke /mnt/troll. Di dalamnya cuma ada 2 file :
+
+* `very_spicy_info.txt` → umpan berisi informasi "bocoran".
+* `upload.txt` → file kosong, tapi menjadi trigger saat di-*echo* oleh DainTontas.
+
+#### c. Jebakan Troll (Berlanjut)
+
+Isi dari `very_spicy_info.txt` bergantung pada siapa yang membuka:
+
+* Jika dibuka oleh **DainTontas** → muncul "leaked roadmap.docx".
+* Jika dibuka oleh user lain → muncul "DainTontas' personal secret!!".
+
+Dilakukan dengan cara mendeteksi siapa user yang sedang membaca file-nya.
+
+#### d. Trap
+
+Jika **DainTontas** melakukan `echo upload > upload.txt`, maka file `upload.txt` akan memicu jebakan:
+
+* File `/tmp/troll_triggered-2` akan dibuat (sebagai flag persist).
+* Setelah flag aktif, semua pembacaan `.txt` akan memunculkan ASCII art bertuliskan "Fell for it again reward".
+
+Fungsi `write` akan memeriksa isi `upload.txt`, dan jika ada kata "upload" dari user `DainTontas`, trap diaktifkan.
+
+### 1. Header dan Library
+
+```c
+#define FUSE_USE_VERSION 28
+```
+
+Menggunakan FUSE Versi 28 sesuai dengan modul.
+
+```c
+#include <fuse.h>
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
+#include <pwd.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+```
+
+Mengimpor library yang diperlukan, manipulasi file, user info, dan error handling.
+
+```c
+const char *mountPath = "/mnt/troll";
+const char *trapPath = "/tmp/troll_triggered-2";
+```
+
+Path untuk mount FUSE dan file pemicu jebakan.
+
+```c
+const char *isDain = "Very spicy internal developer information: leaked roadmap.docx\n";
+const char *isNotDain = "DainTontas' personal secret!!.txt\n";
+const char *uploadFileMedia = "";
+```
+
+Isi file berdasarkan user dan placeholder untuk upload.txt.
+
+```c
+const char *asciiTroll = 
+
+" _            _                                                          \n"
+" |_ _  | |   _|_ _  ._   o _|_    _.  _   _. o ._    ._ _        _. ._ _| \n"
+" | (/_ | |    | (_) |    |  |_   (_| (_| (_| | | |   | (/_ \\/\\/ (_| | (_| \n"
+"                                      _|                                  \n";
+
+```
+
+ASCII Art akan muncul setelah jebakan aktif.
+
+### 2. Fungsi Support
+
+```c
+const char* getUSN(){
+    struct fuse_context *uid = fuse_get_context();
+    struct passwd *userInfo = getpwuid(uid->uid);
+    return userInfo ? userInfo->pw_name : "unknown";
+}
+```
+
+Untuk tahu siapa yang sedang mengakses FUSE.
+
+```c
+int triggerTrap(){
+    return access(trapPath, F_OK) == 0;
+}
+```
+
+Cek apakah jebakan sudah aktif (file `/tmp/...` sudah ada).
+
+```c
+void activate(){
+    FILE *file = fopen(trapPath, "w");
+    if (file){
+        fclose(file);
+    }
+}
+```
+
+Aktifkan jebakan: buat file sebagai penanda bahwa jebakan sudah aktif
+
+### 3. Fungsi getattr
+
+```c
+static int getattr(const char *path, struct stat *fileInfo){
+    memset(fileInfo, 0, sizeof(struct stat));
+    
+    if (strcmp(path, "/") == 0){
+        fileInfo->st_mode = S_IFDIR | 0755;
+        fileInfo->st_nlink = 2;
+    }
+    else if (strcmp(path, "/very_spicy_info.txt") == 0 || strcmp(path, "/upload.txt") == 0){
+        fileInfo->st_mode = S_IFREG| 0666;
+        fileInfo->st_nlink = 1;
+        fileInfo->st_size = 512;
+    }
+    else{
+        return -ENOENT;
+    }
+    return 0;
+}
+```
+
+1. Inisialisasi struktur `fileInfo` menjadi 0.
+2. Jika path root, set sebagai direktori.
+3. Jika salah satu dari dua file, set sebagai file reguler.
+4. Jika path tidak dikenal, kembalikan `error ENOENT`.
+
+### 4. Fungsi readdir
+
+```c
+static int readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi){
+    // copied from module
+    (void) offset;
+    (void) fi;
+
+    if (strcmp(path, "/") != 0){
+        return -ENOENT;
+    }
+
+    filler(buf, ".", NULL, 0);
+    filler(buf, "..", NULL, 0);
+    filler(buf, "very_spicy_info.txt", NULL, 0);
+    filler(buf, "upload.txt", NULL, 0);
+    return 0;
+}
+
+```
+
+1. Cast `fi` dan `offset` ke void.
+2. Cek hanya direktori root yang dapat diakses.
+3. Tambahkan entri direktori ke buffer.
+
+### Fungsi open
+
+```c
+static int openTroll(const char *path, struct fuse_file_info *fi){
+    if (strcmp(path, "/very_spicy_info.txt") != 0 && strcmp(path, "/upload.txt") != 0){
+        return -ENOENT;
+    }
+    return 0;
+}
+```
+
+Hanya izinkan membuka file jika path sesuai.
+
+### 5. Fungsi read
+
+```c
+static int readTroll(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi){
+    // copied from module
+    (void) fi;
+
+    const char *username = getUSN();
+    const char *fileMedia = "";
+
+    if (triggerTrap()){
+        fileMedia = asciiTroll;
+    }
+    else if (strcmp(path, "/very_spicy_info.txt") == 0){
+        if (strcmp(username, "DainTontas") == 0){
+            fileMedia = isDain;
+        }
+        else{
+            fileMedia = isNotDain;
+        }
+    }
+    else if (strcmp(path, "/upload.txt") == 0){
+        fileMedia = uploadFileMedia;
+    }
+    else{
+        return -ENOENT;
+    }
+
+    size_t length = strlen(fileMedia);
+    
+    if (offset >= length){
+        return 0;
+    }
+
+    if (offset + size > length){
+        size = length - offset;
+    }
+    memcpy(buf, fileMedia + offset, size);
+    return size;
+}
+```
+
+1. Cast `fi` ke void.
+2. Ambil username dan siapkan isi file.
+3. Jika jebakan aktif, tampilkan ASCII Art.
+4. Isi file berubah tergantung user.
+5. Cek file yang lain dan kembalikan error jika tidak dikenal.
+6. Salin konten ke buffer dengan batasan offset dan size.
+
+### 6. FUSE Callback: write
+
+```c
+static int writeTroll(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi){
+    // copied from module
+    (void) fi;
+    if (strcmp(path, "/upload.txt") == 0 && strcmp(getUSN(), "DainTontas") == 0){
+
+        if (strstr(buf, "upload") != NULL){
+            activate();
+        }
+        return size;
+    }
+    return -EACCES;
+}
+
+```
+
+1. Cast `fi` ke void.
+2. Jika user dan konten sesuai, jebakan diaktifkan.
+
+### 7. Fungsi FUSE Bind
+
+```c
+static struct fuse_operations DainTontas_Operation = {
+    .write = writeTroll,
+    .read = readTroll,
+    .open = openTroll,
+    .getattr = getattr,
+    .readdir = readdir,
+};
+```
+
+Menghubungkan fungsi-fungsi dengan operasi FUSE.
+
+### 8. Fungsi Main
+
+```c
+int main(int argc, char *argv[]){
+    return fuse_main(argc, argv, &DainTontas_Operation, NULL);
+}
+```
+
+Menjalankan filesystem dengan operasi yang telah didefinisikan.
 
 
 
